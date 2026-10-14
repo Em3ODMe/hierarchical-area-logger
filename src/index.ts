@@ -5,5 +5,8 @@ export type {
   LogEntryType,
   Details,
   RootPayload,
+  OrderedLogEvent,
+  DumpLoggerOptions,
 } from './types';
-export { prettyError } from './utils';
+export { prettyError, orderLogEvents, groupLogEvents } from './utils';
+export { isLogData, isOrderedLogEvents, hasRootPayload } from './guards';

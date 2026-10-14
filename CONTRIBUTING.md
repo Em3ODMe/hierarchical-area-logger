@@ -88,27 +88,33 @@ Thank you for your interest in contributing to this TypeScript logging library! 
 ```
 logger/
 ├── src/
-│   ├── index.ts          # Main entry point and exports
+│   ├── index.ts          # Main entry point and public exports
 │   ├── Logger.ts         # Core Logger class implementation
 │   ├── types.ts          # TypeScript type definitions
-│   └── utils.ts          # Utility functions
+│   ├── utils.ts          # Utility functions
+│   ├── guards.ts         # Type guards for log structures
+│   └── constants.ts      # Internal constants
 ├── dist/                 # Built output (auto-generated)
 ├── test/
-│   └── logger.test.ts    # Test suite
+│   ├── logger.test.ts    # Logger class test suite
+│   ├── utils.test.ts     # Utility functions test suite
+│   └── guards.test.ts    # Type guards test suite
 ├── coverage/             # Coverage reports (auto-generated)
 ├── package.json          # Project configuration
 ├── tsconfig.json         # TypeScript configuration
 ├── vitest.config.ts      # Test configuration
 ├── eslint.config.js      # Linting configuration
-└── tsup.config.ts        # Build configuration
+└── build.config.ts       # Build configuration (unbuild)
 ```
 
 ### Key Files & Responsibilities
 
-- **`src/Logger.ts`**: Core Logger class with area-based logging
+- **`src/Logger.ts`**: Core `Logger` class with area-based logging and the `createLogger` factory
 - **`src/types.ts`**: TypeScript interfaces and type definitions
-- **`src/utils.ts`**: Helper functions for log creation and error handling
-- **`src/index.ts`**: Public API exports
+- **`src/utils.ts`**: Helper functions for log creation, error handling and event ordering/grouping
+- **`src/guards.ts`**: Runtime type guards (`isLogData`, `isOrderedLogEvents`, `hasRootPayload`)
+- **`src/constants.ts`**: Internal constants (e.g. `DEFAULT_PREPARE_DUMP_OPTIONS`)
+- **`src/index.ts`**: Public API exports — **everything public is re-exported here**
 
 ## 📝 Code Standards
 
@@ -117,7 +123,7 @@ logger/
 - **Target**: ES2020
 - **Module**: ESNext
 - **Strict mode**: Enabled
-- **Output**: Both CommonJS and ESM modules
+- **Output**: ESM only (`dist/index.mjs`); the library has zero runtime dependencies
 
 ### ESLint Rules
 
@@ -140,12 +146,10 @@ Key rules enforced:
 ### Import Organization
 
 ```typescript
-// External dependencies
-import { init } from '@paralleldrive/cuid2';
-
 // Internal modules
 import { createRootLogEntry, prettyError } from './utils';
-import { LogData, LoggerOptions, LogEntry } from './types';
+import { hasRootPayload, isLogData } from './guards';
+import type { LogData, LoggerOptions, LogEntry } from './types';
 ```
 
 ## 🧪 Testing
@@ -169,7 +173,8 @@ import { LogData, LoggerOptions, LogEntry } from './types';
    describe('Logger functionality', () => {
      it('should create logger with event ID', () => {
        const logger = createLogger({
-         details: { service: 'test' },
+         details: { instance: 'test' },
+         eventId: 'event-test',
        });
 
        expect(logger.eventId).toBeDefined();
@@ -278,7 +283,7 @@ npm run build
 
 # Verify outputs
 ls -la dist/
-# Should contain: index.js, index.mjs, index.d.ts, source maps
+# Should contain: index.mjs, index.d.ts, index.d.mts, source maps
 ```
 
 ### Publishing

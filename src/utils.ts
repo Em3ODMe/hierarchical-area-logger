@@ -1,10 +1,16 @@
 import {
   CreateRootLogEntryOptions,
   LogData,
-  LogEntry,
+  LogEntryType,
+  OrderedLogEvent,
   RootPayload,
 } from './types';
 
+/**
+ * Cleans up an error stack trace: removes `Error: ` lines, trims whitespace,
+ * strips `file://` prefixes, and truncates absolute paths up to `.wrangler/`
+ * or `node_modules/`.
+ */
 export const prettyStack = (stack?: string): string[] => {
   if (!stack) return [];
   let toReplace = '';
@@ -24,70 +30,109 @@ export const prettyStack = (stack?: string): string[] => {
     .map((line) => line.replace('file://', ''));
 };
 
-export const prettyError = (err: Error) => {
+/**
+ * Converts an Error into a `{ message, name, stack }` object with the stack cleaned
+ * up by `prettyStack`.
+ */
+export const prettyError = (
+  err: Error
+): {
+  message: string;
+  name: string;
+  stack: string[];
+} => {
   const stack = prettyStack(err.stack);
   const message = err.message;
-  return { message, stack };
+  const name = err.name;
+  return { message, name, stack };
 };
 
-export const createRootLogEntry = ({
+/**
+ * Creates the initial ordered log events: a `root` "Request received" event.
+ * When `expectParentEventId` is set but no `parentEventId` is provided, a
+ * `root` error event is appended.
+ */
+export const createRootLogEntry = <
+  AdditionalDetails extends Record<string, unknown> = Record<string, unknown>,
+>({
   path,
   method,
   details,
   eventId,
   parentEventId,
-  withParentEventId,
-}: CreateRootLogEntryOptions): LogData => {
-  const url = new URL(`http://example.com${path ?? '/'}`);
+  expectParentEventId,
+}: CreateRootLogEntryOptions<AdditionalDetails>): OrderedLogEvent[] => {
+  const rootLogEvents: OrderedLogEvent[] = [
+    {
+      holder: 'root',
+      type: 'info',
+      message: 'Log started',
+      payload: {
+        eventId,
+        details,
+        ...(path && { path }),
+        ...(method && { method }),
+        ...(parentEventId && { parentEventId }),
+      } as RootPayload,
+      timestamp: Date.now(),
+    },
+  ];
 
-  const rootLogEntry: LogData = {
-    root: [
-      {
-        type: 'info',
-        message: 'Request received',
-        payload: {
-          path: `${url.pathname}${url.search}`,
-          method,
-          details,
-          eventId,
-          ...(parentEventId && { parentEventId }),
-        } as RootPayload,
-        timestamp: Date.now(),
-      },
-    ],
-  };
-
-  if (withParentEventId && !parentEventId) {
-    rootLogEntry.root.push({
+  if (expectParentEventId && !parentEventId) {
+    rootLogEvents.push({
+      holder: 'root',
       type: 'error',
-      message: 'Parent event ID expected but not found',
+      message: 'Parent event ID expected but not provided',
       timestamp: Date.now(),
     });
   }
 
-  return rootLogEntry;
+  return rootLogEvents;
 };
 
-export const removeEmptyAreas = (logData: LogData) => {
-  const newLogData: LogData = {};
-  for (const [key, value] of Object.entries(logData)) {
-    if (value.length > 0) {
-      newLogData[key] = value;
+/**
+ * Returns the given ordered log events without those whose type is listed in
+ * `excludeLogTypes`. When no types are provided, the events are returned
+ * unchanged.
+ */
+export const excludeLogEntryTypes = (
+  events: OrderedLogEvent[],
+  excludeLogTypes?: LogEntryType[]
+): OrderedLogEvent[] => {
+  if (!excludeLogTypes || excludeLogTypes.length === 0) return events;
+  return events.filter((event) => !excludeLogTypes.includes(event.type));
+};
+
+/**
+ * Flattens log data into a single array of events sorted by timestamp in
+ * ascending order, tagging each event with the name of its holder area.
+ */
+export const orderLogEvents = (logData: LogData): OrderedLogEvent[] => {
+  return (
+    Object.entries(logData)
+      // 1. Flatten the object into a 1D array while mapping the holder name
+      .flatMap(([holder, events]) =>
+        events.map((event) => ({
+          holder,
+          ...event,
+        }))
+      )
+      // 2. Sort the combined array by timestamp (ascending order)
+      .sort((a, b) => a.timestamp - b.timestamp)
+  );
+};
+
+/**
+ * Groups ordered log events back into a `LogData` object keyed by the holder
+ * area of each event, preserving the relative order within each area.
+ */
+export const groupLogEvents = (events: OrderedLogEvent[]): LogData => {
+  const logData: LogData = {};
+  for (const { holder, ...entry } of events) {
+    if (!logData[holder]) {
+      logData[holder] = [];
     }
+    logData[holder].push(entry);
   }
-  return newLogData;
-};
-
-export const excludeDebugLogs = (logEntries: LogEntry[]) => {
-  return logEntries.filter((entry) => entry.type !== 'debug');
-};
-
-export const processProductionLogData = (logData: LogData) => {
-  const newLogData: LogData = {};
-  for (const [key, value] of Object.entries(logData)) {
-    if (key !== 'root') {
-      newLogData[key] = excludeDebugLogs(value);
-    }
-  }
-  return removeEmptyAreas(newLogData);
+  return logData;
 };

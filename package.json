@@ -1,6 +1,6 @@
 {
   "name": "hierarchical-area-logger",
-  "version": "0.3.1",
+  "version": "0.4.1",
   "type": "module",
   "main": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -57,9 +57,6 @@
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.10"
-  },
-  "dependencies": {
-    "@paralleldrive/cuid2": "^3.0.6"
   },
   "keywords": [
     "logger",
